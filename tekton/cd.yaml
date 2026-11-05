@@ -1,0 +1,152 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: accounts-clone
+spec:
+  workspaces:
+    - name: source
+  params:
+    - name: url
+      type: string
+  steps:
+    - name: clone
+      image: alpine/git:2.47.2
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/sh
+        set -eu
+        git clone --depth 1 $(params.url) repo
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: accounts-check
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: lint-and-test
+      image: python:3.9-slim
+      workingDir: $(workspaces.source.path)/repo
+      env:
+        - name: DATABASE_URI
+          value: postgresql://postgres:postgres@postgres:5432/postgres
+      script: |
+        #!/bin/sh
+        set -eu
+        pip install -r requirements.txt
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
+        nosetests
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: accounts-build
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: build-and-push
+      image: quay.io/buildah/stable:v1.40
+      workingDir: $(workspaces.source.path)/repo
+      securityContext:
+        privileged: true
+      script: |
+        #!/bin/sh
+        set -eu
+        buildah --storage-driver=vfs bud --format=docker -t devops-registry:5000/accounts:cd .
+        buildah --storage-driver=vfs push --tls-verify=false devops-registry:5000/accounts:cd docker://devops-registry:5000/accounts:cd
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: accounts-deploy
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: deploy
+      image: alpine/k8s:1.32.3
+      workingDir: $(workspaces.source.path)/repo
+      script: |
+        #!/bin/sh
+        set -eu
+        kubectl apply -f deploy/
+        kubectl set image deployment/accounts accounts=devops-registry:5000/accounts:cd
+        kubectl rollout status deployment/accounts --timeout=180s
+        kubectl get deployments,pods,replicasets,services
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: accounts-cd
+spec:
+  params:
+    - name: repo-url
+      type: string
+  workspaces:
+    - name: source
+  tasks:
+    - name: clone
+      taskRef:
+        name: accounts-clone
+      params:
+        - name: url
+          value: $(params.repo-url)
+      workspaces:
+        - name: source
+          workspace: source
+    - name: checks
+      runAfter: [clone]
+      taskRef:
+        name: accounts-check
+      workspaces:
+        - name: source
+          workspace: source
+    - name: build
+      runAfter: [checks]
+      taskRef:
+        name: accounts-build
+      workspaces:
+        - name: source
+          workspace: source
+    - name: deploy
+      runAfter: [build]
+      taskRef:
+        name: accounts-deploy
+      workspaces:
+        - name: source
+          workspace: source
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: accounts-pipeline
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: accounts-deployer
+rules:
+  - apiGroups: [apps]
+    resources: [deployments, replicasets]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: ['']
+    resources: [pods, services]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, create, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: accounts-deployer
+subjects:
+  - kind: ServiceAccount
+    name: accounts-pipeline
+roleRef:
+  kind: Role
+  name: accounts-deployer
+  apiGroup: rbac.authorization.k8s.io

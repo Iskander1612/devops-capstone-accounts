@@ -1,0 +1,22 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: accounts-cd-
+spec:
+  pipelineRef:
+    name: accounts-cd
+  params:
+    - name: repo-url
+      value: https://github.com/Iskander1612/devops-capstone-accounts.git
+  taskRunTemplate:
+    serviceAccountName: accounts-pipeline
+  workspaces:
+    - name: source
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 1Gi
+  timeouts:
+    pipeline: 30m0s
