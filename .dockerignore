@@ -1,0 +1,6 @@
+.git
+.coverage
+__pycache__
+*.pyc
+.venv
+tests
