@@ -1,4 +1,31 @@
-# DevOps Capstone Template
+# Accounts REST API — DevOps Capstone
+
+[![CI Build](https://github.com/Iskander1612/devops-capstone-accounts/actions/workflows/ci-build.yaml/badge.svg)](https://github.com/Iskander1612/devops-capstone-accounts/actions/workflows/ci-build.yaml)
+
+Completed Accounts CRUD service with PostgreSQL, test-driven API development, Talisman security headers, CORS, GitHub Actions CI, Docker, Kubernetes and a Tekton CD pipeline.
+
+## API
+
+| Method | Endpoint | Result |
+|---|---|---|
+| POST | `/accounts` | Create, 201 and Location header |
+| GET | `/accounts` | List, 200 JSON array |
+| GET | `/accounts/{id}` | Read, 200 or 404 |
+| PUT | `/accounts/{id}` | Update, 200 or 404 |
+| DELETE | `/accounts/{id}` | Delete, 204 |
+| GET | `/health` | Health status, 200 |
+
+## Validation and deployment
+
+- `make lint` runs Flake8; `nosetests` runs all tests and enforces at least 95% coverage.
+- GitHub Actions runs the same checks with PostgreSQL on each push and pull request.
+- `docker build -t accounts:1.0 .` builds the API image; it listens on port 8080.
+- `deploy/` contains a two-replica API deployment, probes, service, ingress and a disposable lab database.
+- `tekton/cd.yaml` clones, lints, tests, builds/pushes with Buildah, and deploys with a namespace-scoped service account. `tekton/run.yaml` starts the pipeline.
+- Local lab uses k3d and `devops-registry:5000`; HTTP registry access and the example database password are for this isolated lab. Production requires credentials from Secrets, persistent database storage and HTTPS ingress.
+- [Sprint board](https://github.com/users/Iskander1612/projects/1) and [user stories](https://github.com/Iskander1612/devops-capstone-accounts/issues).
+
+## IBM starter attribution
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python 3.9](https://img.shields.io/badge/Python-3.9-green.svg)](https://shields.io/)
